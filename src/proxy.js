@@ -477,12 +477,16 @@ export function createApp(config) {
         return [];
     };
 
-    const INTERNAL_ALLOWED_TOOL_NAMES = getEffectiveInternalAllowedTools();
-    const INTERNAL_ALLOWLIST_PROMPT = INTERNAL_ALLOWED_TOOL_NAMES.length > 0
-        ? `OpenCode internal tool access is limited for this turn. You may use only these built-in tools when truly required: ${INTERNAL_ALLOWED_TOOL_NAMES.join(', ')}. Do not mention or attempt any other internal tools. If the required internal tools are unavailable, answer directly and say live tool access is unavailable.`
-        : 'OpenCode internal tools are unavailable for this turn. Answer directly without attempting tool usage.';
+    const SERVER_INTERNAL_ALLOWED_TOOL_NAMES = getEffectiveInternalAllowedTools();
 
-    const buildSystemPrompt = (systemMsg, reasoningEffort = null, toolMode = TOOL_MODE.DISABLED) => {
+    const buildInternalAllowlistPrompt = (allowedToolNames = []) => {
+        if (allowedToolNames.length > 0) {
+            return `OpenCode internal tool access is limited for this turn. You may use only these built-in tools when truly required: ${allowedToolNames.join(', ')}. Do not mention or attempt any other internal tools. If the required internal tools are unavailable, answer directly and say live tool access is unavailable.`;
+        }
+        return 'OpenCode internal tools are unavailable for this turn. Answer directly without attempting tool usage.';
+    };
+
+    const buildSystemPrompt = (systemMsg, reasoningEffort = null, toolMode = TOOL_MODE.DISABLED, internalAllowedTools = []) => {
         const parts = [];
         if (!OMIT_SYSTEM_PROMPT && systemMsg && systemMsg.trim()) {
             parts.push(systemMsg.trim());
@@ -491,7 +495,7 @@ export function createApp(config) {
             parts.push(`[Reasoning Effort: ${reasoningEffort}]`);
         }
         if (toolMode === TOOL_MODE.INTERNAL_ALLOWLIST) {
-            parts.push(INTERNAL_ALLOWLIST_PROMPT);
+            parts.push(buildInternalAllowlistPrompt(internalAllowedTools));
         } else if (DISABLE_TOOLS && PROMPT_MODE !== 'plugin-inject') {
             parts.push(toolMode === TOOL_MODE.EXTERNAL_BRIDGE ? EXTERNAL_TOOL_GUARD_MESSAGE : TOOL_GUARD_MESSAGE);
         }
@@ -570,18 +574,35 @@ export function createApp(config) {
         };
     };
 
-    const resolveToolMode = (tools = []) => {
+    const resolveToolMode = (tools = [], effectiveInternalAllowlist = []) => {
         if (Array.isArray(tools) && tools.length > 0) {
             return TOOL_MODE.EXTERNAL_BRIDGE;
         }
-        if (INTERNAL_ALLOWED_TOOL_NAMES.length > 0) {
+        if (effectiveInternalAllowlist.length > 0) {
             return TOOL_MODE.INTERNAL_ALLOWLIST;
         }
         return TOOL_MODE.DISABLED;
     };
 
-    const createRequestToolContext = (tools, toolChoice) => {
-        const mode = resolveToolMode(tools);
+    const createRequestToolContext = (tools, toolChoice, requestOpencodeConfig = undefined) => {
+        let effectiveInternalAllowlist = SERVER_INTERNAL_ALLOWED_TOOL_NAMES;
+        let requestInternalAllowlist = null;
+
+        if (requestOpencodeConfig && typeof requestOpencodeConfig === 'object') {
+            if (Array.isArray(requestOpencodeConfig.internal_allowed_tools)) {
+                requestInternalAllowlist = requestOpencodeConfig.internal_allowed_tools
+                    .map(name => String(name || '').trim())
+                    .filter(Boolean);
+            }
+        }
+
+        if (requestInternalAllowlist !== null) {
+            effectiveInternalAllowlist = SERVER_INTERNAL_ALLOWED_TOOL_NAMES.filter(name => 
+                requestInternalAllowlist.includes(name)
+            );
+        }
+
+        const mode = resolveToolMode(tools, effectiveInternalAllowlist);
         const external = mode === TOOL_MODE.EXTERNAL_BRIDGE
             ? createExternalToolContext(tools, toolChoice)
             : {
@@ -595,7 +616,8 @@ export function createApp(config) {
             mode,
             external,
             internal: {
-                allowedToolNames: INTERNAL_ALLOWED_TOOL_NAMES,
+                allowedToolNames: effectiveInternalAllowlist,
+                requestedAllowlist: requestInternalAllowlist,
                 metricsEnabled: INTERNAL_TOOL_METRICS_ENABLED
             }
         };
@@ -792,7 +814,7 @@ export function createApp(config) {
         if (toolMode === TOOL_MODE.EXTERNAL_BRIDGE || toolMode === TOOL_MODE.DISABLED) {
             if (toolMode === TOOL_MODE.DISABLED) {
                 logInternalToolEvent('internal-tools-disabled', {
-                    configuredAllowlist: internalContext.allowedToolNames || INTERNAL_ALLOWED_TOOL_NAMES
+                    configuredAllowlist: internalContext.allowedToolNames || SERVER_INTERNAL_ALLOWED_TOOL_NAMES
                 });
             }
             return getDisabledToolOverrides();
@@ -802,7 +824,7 @@ export function createApp(config) {
         }
         const ids = await getBackendToolIds();
         if (!Array.isArray(ids) || ids.length === 0) return null;
-        const resolution = resolveInternalAllowedToolIds(ids, internalContext.allowedToolNames || INTERNAL_ALLOWED_TOOL_NAMES);
+        const resolution = resolveInternalAllowedToolIds(ids, internalContext.allowedToolNames || SERVER_INTERNAL_ALLOWED_TOOL_NAMES);
         const { normalizedIds, normalizedAllowedNames, matchedToolIds, unmatchedAllowedNames } = resolution;
         if (matchedToolIds.length === 0) {
             internalToolMetrics.fallbackToDisabled += 1;
@@ -1069,7 +1091,7 @@ export function createApp(config) {
                 let keepaliveInterval = null;
 
                 try {
-                    const { messages, model, tools = [], tool_choice, stream: requestStream, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop, reasoning_effort, reasoning } = req.body;
+                    const { messages, model, tools = [], tool_choice, stream: requestStream, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop, reasoning_effort, reasoning, opencode: requestOpencodeConfig } = req.body;
                     stream = Boolean(requestStream);
                     if (!messages || !Array.isArray(messages) || messages.length === 0) {
                         return res.status(400).json({ error: { message: 'messages array is required' } });
@@ -1204,7 +1226,7 @@ export function createApp(config) {
                         };
                     };
 
-                    const requestToolContext = createRequestToolContext(tools, tool_choice);
+                    const requestToolContext = createRequestToolContext(tools, tool_choice, requestOpencodeConfig);
                     const toolMode = requestToolContext.mode;
                     const externalToolContext = requestToolContext.external;
                     const externalToolRegistry = externalToolContext.registry;
@@ -1212,13 +1234,15 @@ export function createApp(config) {
                     const internalToolContext = requestToolContext.internal;
                     trackToolMode(toolMode, {
                         configuredAllowlist: internalToolContext.allowedToolNames,
+                        requestedAllowlist: internalToolContext.requestedAllowlist,
                         route: '/v1/chat/completions'
                     });
                     const { parts, system: systemMsg, fullPromptText, lastUserMsg } = await buildPromptParts(messages, externalToolRegistry);
                     const systemWithGuard = buildSystemPrompt(
                         [systemMsg, externalToolContext.prompt].filter(Boolean).join('\n\n'),
                         requestParams.reasoning_effort,
-                        toolMode
+                        toolMode,
+                        internalToolContext.allowedToolNames
                     );
                     if (!parts.length) {
                         return res.status(400).json({ error: { message: 'messages must include at least one non-system text message' } });
@@ -1232,7 +1256,8 @@ export function createApp(config) {
                         parts: parts.length,
                         disableTools: DISABLE_TOOLS,
                         toolMode,
-                        internalAllowedTools: internalToolContext.allowedToolNames
+                        internalAllowedTools: internalToolContext.allowedToolNames,
+                        requestedInternalTools: internalToolContext.requestedAllowlist
                     });
 
                     // Ensure backend is running
@@ -1674,11 +1699,31 @@ export function createApp(config) {
         }
     });
 
-    // Health check
     app.get('/health', (_req, res) => res.json({
         status: 'ok',
         proxy: true
     }));
+
+    app.get('/health/details', (_req, res) => {
+        const metricsSnapshot = INTERNAL_TOOL_METRICS_ENABLED ? { ...internalToolMetrics } : null;
+        res.json({
+            status: 'ok',
+            proxy: true,
+            internal_tools: {
+                config: {
+                    allowed_tools: SERVER_INTERNAL_ALLOWED_TOOL_NAMES,
+                    metrics_enabled: INTERNAL_TOOL_METRICS_ENABLED,
+                    discovery_fixture: normalizeConfiguredToolNames(INTERNAL_TOOL_DISCOVERY_FIXTURE)
+                },
+                metrics: metricsSnapshot,
+                cache: {
+                    tool_ids_cached: !!cachedToolIds,
+                    tool_id_count: cachedToolIds ? cachedToolIds.length : 0,
+                    age_ms: cachedToolIdsAt ? Date.now() - cachedToolIdsAt : null
+                }
+            }
+        });
+    });
 
     app.post('/v1/responses', async (req, res) => {
         try {
@@ -1695,7 +1740,8 @@ export function createApp(config) {
                 top_p,
                 stream = false,
                 messages: chatMessages,
-                prompt
+                prompt,
+                opencode: requestOpencodeConfig
             } = req.body;
 
             const reasoningLevel = normalizeReasoningEffort(
@@ -1703,11 +1749,12 @@ export function createApp(config) {
                 null
             );
 
-            const requestToolContext = createRequestToolContext(tools, tool_choice);
+            const requestToolContext = createRequestToolContext(tools, tool_choice, requestOpencodeConfig);
             const toolMode = requestToolContext.mode;
             const internalToolContext = requestToolContext.internal;
             trackToolMode(toolMode, {
                 configuredAllowlist: internalToolContext.allowedToolNames,
+                requestedAllowlist: internalToolContext.requestedAllowlist,
                 route: '/v1/responses'
             });
             logDebug('Responses API request', { 
@@ -1716,7 +1763,8 @@ export function createApp(config) {
                 reasoningLevel,
                 max_output_tokens,
                 toolMode,
-                internalAllowedTools: internalToolContext.allowedToolNames
+                internalAllowedTools: internalToolContext.allowedToolNames,
+                requestedInternalTools: internalToolContext.requestedAllowlist
             });
             const externalToolContext = requestToolContext.external;
             const externalToolRegistry = externalToolContext.registry;
@@ -1868,7 +1916,8 @@ export function createApp(config) {
             const systemWithGuard = buildSystemPrompt(
                 [instructions, ...systemChunks, externalToolContext.prompt].filter(Boolean).join('\n\n'),
                 reasoningLevel,
-                toolMode
+                toolMode,
+                internalToolContext.allowedToolNames
             );
 
             const requestForcedResponsesToolCall = createForcedToolCallRequester({
@@ -2592,6 +2641,22 @@ export function startProxy(options) {
         DISABLE_TOOLS: disableTools,
         EXTERNAL_TOOLS_MODE: externalToolsMode,
         EXTERNAL_TOOLS_CONFLICT_POLICY: externalToolsConflictPolicy,
+        INTERNAL_WEB_FETCH_ENABLED: normalizeBool(options.INTERNAL_WEB_FETCH_ENABLED) ??
+            normalizeBool(process.env.OPENCODE_INTERNAL_WEB_FETCH_ENABLED) ??
+            false,
+        INTERNAL_ALLOWED_TOOLS: Array.isArray(options.INTERNAL_ALLOWED_TOOLS)
+            ? options.INTERNAL_ALLOWED_TOOLS
+            : typeof process.env.OPENCODE_INTERNAL_ALLOWED_TOOLS === 'string'
+                ? process.env.OPENCODE_INTERNAL_ALLOWED_TOOLS.split(',').map(entry => entry.trim()).filter(Boolean)
+                : [],
+        INTERNAL_TOOL_METRICS_ENABLED: normalizeBool(options.INTERNAL_TOOL_METRICS_ENABLED) ??
+            normalizeBool(process.env.OPENCODE_INTERNAL_TOOL_METRICS_ENABLED) ??
+            true,
+        INTERNAL_TOOL_DISCOVERY_FIXTURE: Array.isArray(options.INTERNAL_TOOL_DISCOVERY_FIXTURE)
+            ? options.INTERNAL_TOOL_DISCOVERY_FIXTURE
+            : typeof process.env.OPENCODE_TOOL_DISCOVERY_FIXTURE === 'string'
+                ? process.env.OPENCODE_TOOL_DISCOVERY_FIXTURE.split(',').map(entry => entry.trim()).filter(Boolean)
+                : [],
         DEBUG: String(options.DEBUG || '').toLowerCase() === 'true' ||
             options.DEBUG === '1' ||
             String(process.env.OPENCODE_PROXY_DEBUG || '').toLowerCase() === 'true' ||
