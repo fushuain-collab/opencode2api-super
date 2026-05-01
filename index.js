@@ -44,6 +44,10 @@ const defaultConfig = {
     INTERNAL_ALLOWED_TOOLS: parseToolAllowlist(process.env.OPENCODE_INTERNAL_ALLOWED_TOOLS, []),
     INTERNAL_TOOL_METRICS_ENABLED: parseBool(process.env.OPENCODE_INTERNAL_TOOL_METRICS_ENABLED, true),
     INTERNAL_TOOL_DISCOVERY_FIXTURE: parseToolAllowlist(process.env.OPENCODE_TOOL_DISCOVERY_FIXTURE, []),
+    HEALTH_DETAILS_ENABLED: parseBool(process.env.OPENCODE_HEALTH_DETAILS_ENABLED, true),
+    HEALTH_DETAILS_REQUIRE_AUTH: parseBool(process.env.OPENCODE_HEALTH_DETAILS_REQUIRE_AUTH, true),
+    METRICS_ENABLED: parseBool(process.env.OPENCODE_METRICS_ENABLED, false),
+    METRICS_REQUIRE_AUTH: parseBool(process.env.OPENCODE_METRICS_REQUIRE_AUTH, true),
     PROMPT_MODE: process.env.OPENCODE_PROXY_PROMPT_MODE || 'standard',
     OMIT_SYSTEM_PROMPT: parseBool(process.env.OPENCODE_PROXY_OMIT_SYSTEM_PROMPT, false),
     AUTO_CLEANUP_CONVERSATIONS: parseBool(process.env.OPENCODE_PROXY_AUTO_CLEANUP_CONVERSATIONS, false),
@@ -81,6 +85,10 @@ const finalConfig = {
     INTERNAL_ALLOWED_TOOLS: parseToolAllowlist(process.env.OPENCODE_INTERNAL_ALLOWED_TOOLS, parseToolAllowlist(fileConfig.INTERNAL_ALLOWED_TOOLS, defaultConfig.INTERNAL_ALLOWED_TOOLS)),
     INTERNAL_TOOL_METRICS_ENABLED: parseBool(process.env.OPENCODE_INTERNAL_TOOL_METRICS_ENABLED, parseBool(fileConfig.INTERNAL_TOOL_METRICS_ENABLED, defaultConfig.INTERNAL_TOOL_METRICS_ENABLED)),
     INTERNAL_TOOL_DISCOVERY_FIXTURE: parseToolAllowlist(process.env.OPENCODE_TOOL_DISCOVERY_FIXTURE, parseToolAllowlist(fileConfig.INTERNAL_TOOL_DISCOVERY_FIXTURE, defaultConfig.INTERNAL_TOOL_DISCOVERY_FIXTURE)),
+    HEALTH_DETAILS_ENABLED: parseBool(process.env.OPENCODE_HEALTH_DETAILS_ENABLED, parseBool(fileConfig.HEALTH_DETAILS_ENABLED, defaultConfig.HEALTH_DETAILS_ENABLED)),
+    HEALTH_DETAILS_REQUIRE_AUTH: parseBool(process.env.OPENCODE_HEALTH_DETAILS_REQUIRE_AUTH, parseBool(fileConfig.HEALTH_DETAILS_REQUIRE_AUTH, defaultConfig.HEALTH_DETAILS_REQUIRE_AUTH)),
+    METRICS_ENABLED: parseBool(process.env.OPENCODE_METRICS_ENABLED, parseBool(fileConfig.METRICS_ENABLED, defaultConfig.METRICS_ENABLED)),
+    METRICS_REQUIRE_AUTH: parseBool(process.env.OPENCODE_METRICS_REQUIRE_AUTH, parseBool(fileConfig.METRICS_REQUIRE_AUTH, defaultConfig.METRICS_REQUIRE_AUTH)),
     USE_ISOLATED_HOME: parseBool(process.env.OPENCODE_USE_ISOLATED_HOME, parseBool(fileConfig.USE_ISOLATED_HOME, false)),
     REQUEST_TIMEOUT_MS: parseInt(process.env.OPENCODE_PROXY_REQUEST_TIMEOUT_MS) || fileConfig.REQUEST_TIMEOUT_MS || 180000,
     DEBUG: parseBool(process.env.OPENCODE_PROXY_DEBUG, parseBool(fileConfig.DEBUG, false)),
@@ -126,6 +134,10 @@ console.log(`  - Internal web_fetch Enabled: ${finalConfig.INTERNAL_WEB_FETCH_EN
 console.log(`  - Internal Allowed Tools: ${finalConfig.INTERNAL_ALLOWED_TOOLS.length ? finalConfig.INTERNAL_ALLOWED_TOOLS.join(', ') : '(none)'}`);
 console.log(`  - Internal Tool Metrics Enabled: ${finalConfig.INTERNAL_TOOL_METRICS_ENABLED ? 'Yes' : 'No'}`);
 console.log(`  - Internal Tool Discovery Fixture: ${finalConfig.INTERNAL_TOOL_DISCOVERY_FIXTURE.length ? finalConfig.INTERNAL_TOOL_DISCOVERY_FIXTURE.join(', ') : '(none)'}`);
+console.log(`  - Health Details Enabled: ${finalConfig.HEALTH_DETAILS_ENABLED ? 'Yes' : 'No'}`);
+console.log(`  - Health Details Require Auth: ${finalConfig.HEALTH_DETAILS_REQUIRE_AUTH ? 'Yes' : 'No'}`);
+console.log(`  - Metrics Enabled: ${finalConfig.METRICS_ENABLED ? 'Yes' : 'No'}`);
+console.log(`  - Metrics Require Auth: ${finalConfig.METRICS_REQUIRE_AUTH ? 'Yes' : 'No'}`);
 console.log(`  - Use Isolated Home: ${finalConfig.USE_ISOLATED_HOME ? 'Yes' : 'No'}`);
 console.log(`  - Request Timeout: ${finalConfig.REQUEST_TIMEOUT_MS}ms`);
 console.log(`  - Prompt Mode: ${finalConfig.PROMPT_MODE}`);
