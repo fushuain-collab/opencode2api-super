@@ -180,6 +180,10 @@ curl -N -X POST http://127.0.0.1:10000/v1/responses \
 | `OPENCODE_INTERNAL_ALLOWED_TOOLS` | `(none)` | 当请求未传入 `tools` 时，允许使用的 OpenCode 内置工具列表，逗号分隔 |
 | `OPENCODE_INTERNAL_TOOL_METRICS_ENABLED` | `true` | 输出 internal allowlist 模式的调试/指标日志 |
 | `OPENCODE_TOOL_DISCOVERY_FIXTURE` | `(none)` | 集成测试/本地调试用的后端工具 ID 固定列表，逗号分隔 |
+| `OPENCODE_HEALTH_DETAILS_ENABLED` | `true` | 控制 `/health/details` 是否暴露 |
+| `OPENCODE_HEALTH_DETAILS_REQUIRE_AUTH` | `true` | 控制 `/health/details` 是否要求 Bearer 认证 |
+| `OPENCODE_METRICS_ENABLED` | `false` | 控制 `/metrics` 是否暴露 |
+| `OPENCODE_METRICS_REQUIRE_AUTH` | `true` | 控制 `/metrics` 是否要求 Bearer 认证 |
 | `USE_ISOLATED_HOME` | `false` | 使用隔离的 OpenCode 配置目录 |
 | `OPENCODE_PROXY_PROMPT_MODE` | `standard` | 提示词处理模式 |
 | `OPENCODE_PROXY_OMIT_SYSTEM_PROMPT` | `false` | 忽略传入的 system prompt |
@@ -206,10 +210,15 @@ OPENCODE_EXTERNAL_TOOLS_CONFLICT_POLICY=namespace
 OPENCODE_INTERNAL_ALLOWED_TOOLS=web_fetch
 OPENCODE_INTERNAL_TOOL_METRICS_ENABLED=true
 OPENCODE_TOOL_DISCOVERY_FIXTURE=
+OPENCODE_HEALTH_DETAILS_ENABLED=true
+OPENCODE_HEALTH_DETAILS_REQUIRE_AUTH=true
+OPENCODE_METRICS_ENABLED=false
+OPENCODE_METRICS_REQUIRE_AUTH=true
 OPENCODE_PROXY_PROMPT_MODE=plugin-inject
 OPENCODE_PROXY_OMIT_SYSTEM_PROMPT=true
 OPENCODE_PROXY_AUTO_CLEANUP_CONVERSATIONS=true
 ```
+
 
 ### 外部工具桥接说明
 
@@ -228,23 +237,12 @@ OPENCODE_PROXY_AUTO_CLEANUP_CONVERSATIONS=true
 - `OPENCODE_TOOL_DISCOVERY_FIXTURE` 可用于集成测试或本地调试，绕过真实 `client.tool.ids()` 返回固定工具 ID 列表。
 - 一旦客户端显式传入 `tools`，请求立即回到现有外部工具桥接逻辑，OpenCode 内置工具继续保持禁用。
 
-### 请求级 allowlist 覆盖 (Request-Level Override)
+### 结构化诊断与 Prometheus 指标
 
-在请求未传入 `tools` 的前提下，客户端可以在请求体中传入自定义字段 `opencode.internal_allowed_tools` 来覆盖服务端的默认内置工具列表。
-出于安全隔离原则，请求级覆盖**只能缩小（求交集），不能扩大**服务端的 allowlist 权限：
-- 如果请求了服务端未开启的内置工具，该工具会被自动忽略。
-- `effective_allowlist = intersection(server_allowlist, request_allowlist)`
-
-**示例：**
-```json
-{
-  "model": "opencode/kimi-k2.5",
-  "messages": [{"role": "user", "content": "Fetch this URL"}],
-  "opencode": {
-    "internal_allowed_tools": ["web_fetch"]
-  }
-}
-```
+- `/health` 始终保持为轻量健康检查接口。
+- `/health/details` 返回结构化 JSON 诊断数据，可通过 `OPENCODE_HEALTH_DETAILS_ENABLED` 控制是否暴露，并通过 `OPENCODE_HEALTH_DETAILS_REQUIRE_AUTH` 控制是否要求 Bearer 认证。
+- `/metrics` 返回 Prometheus 文本格式指标，可通过 `OPENCODE_METRICS_ENABLED` 控制是否暴露，并通过 `OPENCODE_METRICS_REQUIRE_AUTH` 控制是否要求 Bearer 认证。
+- `/metrics` 目前暴露 internal tool mode、tool discovery failures、fallback count 和 tool-id cache 数量等指标。
 
 ---
 
@@ -255,7 +253,8 @@ OPENCODE_PROXY_AUTO_CLEANUP_CONVERSATIONS=true
 | 方法 | 路径 | 说明 |
 |:-----|:-----|:-----|
 | `GET` | `/health` | 健康检查 |
-| `GET` | `/health/details` | 结构化诊断接口（配置状态、内部指标与缓存） |
+| `GET` | `/health/details` | 结构化诊断接口（可配置开关/鉴权） |
+| `GET` | `/metrics` | Prometheus 指标接口（可配置开关/鉴权） |
 | `GET` | `/v1/models` | 获取可用模型列表 |
 | `POST` | `/v1/chat/completions` | Chat Completions API |
 | `POST` | `/v1/responses` | Responses API |
