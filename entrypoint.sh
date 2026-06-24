@@ -17,7 +17,7 @@ chown -R node:node /home/node/.config/opencode
 chown -R node:node /home/node/project
 
 # Allow overriding via environment variables
-PROXY_PORT=${OPENCODE_PROXY_PORT:-10000}
+PROXY_PORT=${PORT:-${OPENCODE_PROXY_PORT:-10000}}
 SERVER_PORT=${OPENCODE_SERVER_PORT:-10001}
 
 if [[ "${OPENCODE_PROXY_PROMPT_MODE:-standard}" == "plugin-inject" ]]; then

@@ -27,7 +27,7 @@ RUN npm install --production
 
 COPY . .
 
-EXPOSE 10000 10001
+EXPOSE 80 10001
 
 ENV OPENCODE_SERVER_PASSWORD=
 ENV API_KEY=
@@ -43,4 +43,4 @@ ENV OPENCODE_PROXY_CLEANUP_MAX_AGE_MS=86400000
 ENV OPENCODE_PROXY_REQUEST_TIMEOUT_MS=180000
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "10001"]
+CMD ["opencode", "serve"]
