@@ -1,6 +1,13 @@
 FROM node:20-slim
 
-RUN npm install -g opencode-ai
+RUN apt-get update && apt-get install -y xz-utils && rm -rf /var/lib/apt/lists/*
+
+# Download opencode binary directly (avoid npm postinstall issues)
+RUN set -eux; \
+    curl -sL "https://github.com/Glama/open-code/releases/latest/download/opencode-linux-x64.tar.xz" -o /tmp/opencode.tar.xz; \
+    tar -xJf /tmp/opencode.tar.xz -C /usr/local/bin/; \
+    rm /tmp/opencode.tar.xz; \
+    opencode --version
 
 WORKDIR /app
 
