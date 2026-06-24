@@ -5,11 +5,10 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
+    "start": "node start.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --detectOpenHandles",
     "test:unit": "npm test",
-    "test:integration": "bash tests/test-integration.sh",
-    "postinstall": "npm install -g opencode-ai"
+    "test:integration": "bash tests/test-integration.sh"
   },
   "keywords": [
     "opencode",
