@@ -1,12 +1,9 @@
 FROM node:20-slim
 
-RUN apt-get update && apt-get install -y xz-utils curl && rm -rf /var/lib/apt/lists/*
-
-# Download opencode binary directly (avoid npm postinstall issues)
-RUN set -eux; \
-    curl -sL "https://github.com/Glama/open-code/releases/latest/download/opencode-linux-x64.tar.xz" -o /tmp/opencode.tar.xz && \
-    tar -xJf /tmp/opencode.tar.xz -C /usr/local/bin/ && \
-    rm /tmp/opencode.tar.xz && \
+# Install opencode-linux-x64 directly (the native binary package)
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* && \
+    npm install -g opencode-linux-x64@1.17.9 --ignore-scripts && \
+    ln -s /usr/local/lib/node_modules/opencode-linux-x64/bin/opencode /usr/local/bin/opencode && \
     opencode --version
 
 WORKDIR /app
