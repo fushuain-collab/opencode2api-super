@@ -14,8 +14,8 @@ console.log(`[Startup] OpenCode Server port: ${SERVER_PORT}, Proxy port: ${PROXY
 
 // Step 1: Start OpenCode Server
 console.log('[Startup] Starting OpenCode Server...');
-// Use npx to run opencode (works without global install)
-const serverProcess = spawn('npx', ['--yes', 'opencode-ai', 'serve', '--hostname', '0.0.0.0', '--port', String(SERVER_PORT)], {
+// Use npx to run opencode (package is in dependencies, so it's quick)
+const serverProcess = spawn('npx', ['--no-install', 'opencode-ai', 'serve', '--hostname', '0.0.0.0', '--port', String(SERVER_PORT)], {
     stdio: ['pipe', 'inherit', 'inherit'],
     env: { ...process.env, HOME: process.env.HOME || '/home/node' }
 });
