@@ -1,0 +1,36 @@
+app = "opencode2api-super-fushuain"
+primary_region = "sin"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "80"
+  API_KEY = "sk-opencode2api-super-2025"
+  MANAGE_BACKEND = "false"
+  OPENCODE_BINARY_VERSION = "1.17.9"
+  OPENCODE_RUNTIME_DIR = "/opt/opencode-runtime"
+  OPENCODE_PATH = "/opt/opencode-runtime/node_modules/opencode-linux-x64/bin/opencode"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
