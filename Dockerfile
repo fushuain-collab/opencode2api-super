@@ -1,18 +1,14 @@
 FROM node:20-slim
 
-# Install opencode globally
 RUN npm install -g opencode-ai
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy application code
 COPY . .
 
-# Build the system prompt
 RUN mkdir -p /home/node/.config/opencode/plugin/opencode2api-empty && \
     echo 'export const Opencode2apiEmptyPlugin = async () => ({})
 export default Opencode2apiEmptyPlugin' > /home/node/.config/opencode/plugin/opencode2api-empty/index.js && \
@@ -23,7 +19,8 @@ export default Opencode2apiEmptyPlugin' > /home/node/.config/opencode/plugin/ope
 }' > /home/node/.config/opencode/opencode.json
 
 ENV NODE_ENV=production
+ENV OPENCODE_SERVER_PORT=10001
 
-EXPOSE 80
+EXPOSE 80 10001
 
-CMD ["node", "start.js"]
+ENTRYPOINT ["node", "start.js"]
