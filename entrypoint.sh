@@ -45,24 +45,28 @@ if [[ "$1" == "opencode" && "$2" == "serve" ]]; then
     SERVER_PID=$!
     
     echo "Waiting for OpenCode Server to become available..."
-    MAX_RETRIES=30
+    MAX_RETRIES=120
     COUNT=0
-    while ! curl -s http://127.0.0.1:${SERVER_PORT}/health > /dev/null; do
+    while ! curl -s http://127.0.0.1:${SERVER_PORT}/health > /dev/null 2>&1; do
         if [ $COUNT -ge $MAX_RETRIES ]; then
-            echo "Timeout waiting for OpenCode Server."
+            echo "Timeout waiting for OpenCode Server after ${MAX_RETRIES} attempts."
             kill $SERVER_PID 2>/dev/null
             exit 1
         fi
         
         if ! kill -0 $SERVER_PID 2>/dev/null; then
             echo "OpenCode Server process died unexpectedly."
+            wait $SERVER_PID
             exit 1
         fi
         
-        sleep 1
+        sleep 2
         COUNT=$((COUNT+1))
+        if [ $((COUNT % 10)) -eq 0 ]; then
+            echo "Still waiting for OpenCode Server... (attempt ${COUNT}/${MAX_RETRIES})"
+        fi
     done
-    echo "OpenCode Server is up!"
+    echo "OpenCode Server is up! (after ${COUNT} attempts)"
 
     echo "Starting OpenAI Proxy on port ${PROXY_PORT}..."
     exec gosu node node index.js
