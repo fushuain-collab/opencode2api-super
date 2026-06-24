@@ -14,8 +14,8 @@ console.log(`[Startup] OpenCode Server port: ${SERVER_PORT}, Proxy port: ${PROXY
 
 // Step 1: Start OpenCode Server
 console.log('[Startup] Starting OpenCode Server...');
-// OpenCode Server process (binary should be in PATH from Dockerfile)
-const serverProcess = spawn('opencode', ['serve', '--hostname', '0.0.0.0', '--port', String(SERVER_PORT)], {
+// OpenCode Server process (use npx --no-install to find it in node_modules)
+const serverProcess = spawn('npx', ['--no-install', 'opencode-ai', 'serve', '--hostname', '0.0.0.0', '--port', String(SERVER_PORT)], {
     stdio: ['pipe', 'inherit', 'inherit'],
     env: { ...process.env, HOME: process.env.HOME || '/home/node' }
 });
