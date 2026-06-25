@@ -369,6 +369,11 @@ export function createApp(config) {
         return false;
     };
 
+    app.use((req, res, next) => {
+        res.setHeader('X-OpenCode2API-Commit', process.env.RAILWAY_GIT_COMMIT_SHA || process.env.SOURCE_VERSION || 'unknown');
+        next();
+    });
+
     // Auth middleware
     app.use((req, res, next) => {
         if (req.method === 'OPTIONS' || req.path === '/health' || req.path === '/' || req.path === '/health/details' || req.path === '/metrics') return next();
@@ -1792,7 +1797,8 @@ export function createApp(config) {
 
     app.get('/health', (_req, res) => res.json({
         status: 'ok',
-        proxy: true
+        proxy: true,
+        commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.SOURCE_VERSION || 'unknown'
     }));
 
     app.get('/health/details', (req, res) => {
