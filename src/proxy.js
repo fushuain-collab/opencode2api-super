@@ -1491,18 +1491,7 @@ export function createApp(config) {
                                 streamedContent += filtered;
                                 completionTokens += Math.ceil(filtered.length / 4);
                             }
-                            // === EXTHINK FIX: when reasoning detected but content is still empty,
-                            // emit reasoning fallback as content delta so Operit client gets text ===
-                            if (isReasoning && !rawStreamedContent && rawStreamedReasoning) {
-                                const fallbackContent = filtered;
-                                writeTextChunk({
-                                    id,
-                                    object: 'chat.completion.chunk',
-                                    created: Math.floor(Date.now() / 1000),
-                                    model: `${pID}/${mID}`,
-                                    choices: [{ index: 0, delta: { content: fallbackContent }, finish_reason: null }]
-                                });
-                            }
+
                             writeTextChunk({
                                 id,
                                 object: 'chat.completion.chunk',
@@ -1630,8 +1619,18 @@ export function createApp(config) {
                         if (finalStreamedToolCalls.length === 0 && deferredTextChunks.length > 0) {
                             deferredTextChunks.forEach((serializedChunk) => res.write(serializedChunk));
                         }
+                        // Emit pending fallback reasoning directly as content delta (not via sendDelta to avoid re-trigger)
                         if (finalStreamedToolCalls.length === 0 && pendingFallbackReasoning) {
-                            sendDelta(pendingFallbackReasoning, true);
+                            const fallbackChunk = pendingFallbackReasoning;
+                            writeTextChunk({
+                                id,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: `${pID}/${mID}`,
+                                choices: [{ index: 0, delta: { content: fallbackChunk }, finish_reason: null }]
+                            });
+                            // Track that we already emitted reasoning content to prevent duplicate at stream end
+                            rawStreamedContent = rawStreamedContent || fallbackChunk;
                         }
                         if (finalStreamedToolCalls.length > 0 && streamedToolCalls.length === 0) {
                             const toolCallDeltas = finalStreamedToolCalls.map((toolCall, index) => ({
@@ -1656,9 +1655,13 @@ export function createApp(config) {
                             })}\n\n`);
                         }
 
-                        // === EXTHINK FIX: if stream finished with empty content but non-empty reasoning,
-                        // emit reasoning as content fallback so Operit client gets a response ===
-                        if (!streamedContent && streamedReasoning && finalStreamedToolCalls.length === 0) {
+                        // FIXED EXTHINK: only emit reasoning as content once at stream end
+                        // Only trigger when:
+                        // 1. No content was streamed (streamedContent is empty)
+                        // 2. Reasoning was collected
+                        // 3. No tool calls were made
+                        // 4. The reasoning hasn't already been emitted as fallback content via pendingFallbackReasoning
+                        if (!streamedContent && !rawStreamedContent && streamedReasoning && finalStreamedToolCalls.length === 0) {
                             logDebug("EXTHINK fallback: reasoning->content", { reasoningLen: streamedReasoning.length });
                             const thinkContent = '<think>\n' + streamedReasoning + '\n</think>';
                             writeTextChunk({
