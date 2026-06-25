@@ -2662,16 +2662,28 @@ async function ensureBackend(config) {
                     const pluginDir = path.join(configDir, 'plugin', 'opencode2api-empty');
                     fs.mkdirSync(pluginDir, { recursive: true });
                     fs.writeFileSync(path.join(pluginDir, 'index.js'), `export const Opencode2apiEmptyPlugin = async () => ({})\nexport default Opencode2apiEmptyPlugin\n`, 'utf8');
+                    // Load skill instructions from src/skills/*.md or *.txt
+                    const skillsDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'skills');
+                    const skillInstructions = [];
+                    if (fs.existsSync(skillsDir)) {
+                        for (const f of fs.readdirSync(skillsDir).sort()) {
+                            if (/\.(md|txt)$/.test(f)) {
+                                try {
+                                    skillInstructions.push(fs.readFileSync(path.join(skillsDir, f), 'utf8').trim());
+                                } catch {}
+                            }
+                        }
+                    }
                     fs.writeFileSync(
                         path.join(configDir, 'opencode.json'),
                         JSON.stringify({
                             plugin: [path.join(pluginDir, 'index.js')],
-                            instructions: [],
+                            instructions: skillInstructions,
                             theme: 'system'
                         }, null, 2),
                         'utf8'
                     );
-                    console.log('[Proxy] Using plugin-inject prompt mode');
+                    console.log(`[Proxy] Plugin-inject: loaded ${skillInstructions.length} skill(s)`);
                 }
                 console.log('[Proxy] Using isolated home for OpenCode');
             } else {
