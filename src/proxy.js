@@ -1393,7 +1393,7 @@ export function createApp(config) {
                         let rawStreamedContent = '';
                         let rawStreamedReasoning = '';
                         const streamedToolCalls = [];
-                        const deferStreamingTextForToolDecision = externalToolRegistry.length > 0 && externalToolChoice.mode !== 'none';
+                        const deferStreamingTextForToolDecision = externalToolRegistry.length > 0 && externalToolChoice.mode === 'required';
                         const deferredTextChunks = [];
                         const writeTextChunk = (chunk) => {
                             const serialized = `data: ${JSON.stringify(chunk)}\n\n`;
