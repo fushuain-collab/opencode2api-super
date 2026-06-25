@@ -38,8 +38,10 @@ export function buildExternalToolsPrompt(registry, toolChoice = null) {
 
   return [
     'External tools are virtualized by this proxy. They are not OpenCode tools.',
-    'When you need an external tool, your entire assistant reply MUST be ONLY one or more <function_calls>...</function_calls> blocks.',
-    'Do NOT output <think>, explanations, markdown, prose, or any text before or after <function_calls> blocks when making a tool call.',
+    'IMPORTANT: When you need an external tool, your assistant reply MUST contain a <function_calls> block with the JSON payload inside.',
+    'Example format: <function_calls>{"name":"external__tool_name","arguments":{...}}</function_calls>',
+    'You MUST wrap the JSON inside <function_calls>...</function_calls> tags. Do NOT output bare JSON without these tags.',
+    'Do NOT output <think>, explanations, markdown, prose, or any text before or after the <function_calls> block when making a tool call.',
     'Each block must contain JSON with this exact shape:',
     '{"name":"external__tool_name","arguments":{}}',
     'Arguments must be a valid JSON object that matches the declared schema.',

@@ -8,35 +8,82 @@ export function stripFunctionCallMarkup(text, trim = true) {
   return trim ? cleaned.trim() : cleaned;
 }
 
+const BARE_JSON_TOOL_RE = /{(?:\s*"[^"]+"\s*:\s*"[^"]*"\s*,?\s*)*"name"\s*:\s*"[^"]+"/;
+
+function tryParseJsonAsToolCall(jsonStr) {
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const rawCalls = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.tool_calls)
+        ? parsed.tool_calls
+        : [parsed];
+    return rawCalls.filter((rc) => rc?.name || rc?.function?.name);
+  } catch { return null; }
+}
+
 export function parseToolCallsFromText(...chunks) {
   const matches = [];
   chunks.forEach((chunk) => {
     if (!chunk || typeof chunk !== 'string') return;
+    // 1) First, try matching <function_calls> wrapped blocks
     const blocks = chunk.matchAll(/<function_calls>([\s\S]*?)<\/function_calls>/g);
+    let foundWrapped = false;
     for (const block of blocks) {
       const payload = block?.[1]?.trim();
       if (!payload) continue;
-      try {
-        const parsed = JSON.parse(payload);
-        const rawCalls = Array.isArray(parsed)
-          ? parsed
-          : Array.isArray(parsed?.tool_calls)
-            ? parsed.tool_calls
-            : [parsed];
-        rawCalls.forEach((rawCall, index) => {
-          const name = rawCall?.function?.name || rawCall?.name;
-          const rawArgs = rawCall?.function?.arguments ?? rawCall?.arguments ?? {};
-          if (!name) return;
-          matches.push({
-            id: rawCall?.id || `call_${Date.now()}_${matches.length + index + 1}`,
-            type: 'function',
-            function: {
-              name,
-              arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs)
-            }
-          });
+      const rawCalls = tryParseJsonAsToolCall(payload);
+      if (!rawCalls) continue;
+      foundWrapped = true;
+      rawCalls.forEach((rawCall, index) => {
+        const name = rawCall?.function?.name || rawCall?.name;
+        const rawArgs = rawCall?.function?.arguments ?? rawCall?.arguments ?? {};
+        if (!name) return;
+        matches.push({
+          id: rawCall?.id || `call_${Date.now()}_${matches.length + index + 1}`,
+          type: 'function',
+          function: {
+            name,
+            arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs)
+          }
         });
-      } catch {
+      });
+    }
+    // 2) If no <function_calls> blocks found, fallback: try bare JSON object(s)
+    //    matching pattern like {"name":"external__xxx","arguments":{...}}
+    if (!foundWrapped) {
+      let searchPos = 0;
+      while (searchPos < chunk.length) {
+        const braceStart = chunk.indexOf('{', searchPos);
+        if (braceStart === -1) break;
+        let depth = 0;
+        let braceEnd = -1;
+        for (let i = braceStart; i < chunk.length; i++) {
+          if (chunk[i] === '{') depth++;
+          else if (chunk[i] === '}') {
+            depth--;
+            if (depth === 0) { braceEnd = i; break; }
+          }
+        }
+        if (braceEnd === -1) break;
+        const jsonCandidate = chunk.slice(braceStart, braceEnd + 1);
+        const rawCalls = tryParseJsonAsToolCall(jsonCandidate);
+        if (rawCalls) {
+          rawCalls.forEach((rawCall, index) => {
+            const name = rawCall?.function?.name || rawCall?.name;
+            const rawArgs = rawCall?.function?.arguments ?? rawCall?.arguments ?? {};
+            if (!name) return;
+            matches.push({
+              id: rawCall?.id || `call_${Date.now()}_${matches.length + index + 1}`,
+              type: 'function',
+              function: {
+                name,
+                arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs)
+              }
+            });
+          });
+        }
+        searchPos = braceEnd + 1;
       }
     }
   });
