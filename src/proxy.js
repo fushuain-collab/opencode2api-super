@@ -1298,6 +1298,11 @@ export function createApp(config) {
             });
 
                     const { parts, system: systemMsg, fullPromptText, lastUserMsg } = await buildPromptParts(messages, externalToolRegistry);
+                    const hasExternalToolResults = messages.some((message) => {
+                        const role = String(message?.role || '').toLowerCase();
+                        const content = normalizeMessageContent(message?.content);
+                        return role === 'tool' || content.startsWith('TOOL_RESULT:');
+                    });
                     const systemWithGuard = buildSystemPrompt(
                         [systemMsg, externalToolContext.prompt].filter(Boolean).join('\n\n'),
                         requestParams.reasoning_effort,
@@ -1420,9 +1425,11 @@ export function createApp(config) {
                             if (!delta) return;
                             if (isReasoning) rawStreamedReasoning += delta;
                             else rawStreamedContent += delta;
-                            const parsedDeltaToolCalls = isReasoning
-                                ? parseReasoningToolCalls(delta)
-                                : parseContentToolCalls(delta);
+                            const parsedDeltaToolCalls = hasExternalToolResults
+                                ? []
+                                : (isReasoning
+                                    ? parseReasoningToolCalls(delta)
+                                    : parseContentToolCalls(delta));
                             parsedDeltaToolCalls.forEach((toolCall) => {
                                 streamedToolCalls.push(toolCall);
                                 res.write(`data: ${JSON.stringify({
@@ -1578,12 +1585,12 @@ export function createApp(config) {
                             });
                         }
 
-                        let parsedToolCalls = streamedToolCalls.length > 0
+                        let parsedToolCalls = (streamedToolCalls.length > 0 && !hasExternalToolResults)
                             ? streamedToolCalls
                             : (externalToolRegistry.length > 0
                                 ? parseExternalToolCallsFromText(externalToolRegistry, rawStreamedReasoning, rawStreamedContent)
                                 : []);
-                        if (parsedToolCalls.length === 0 && shouldForceExternalToolCall({
+                        if (!hasExternalToolResults && parsedToolCalls.length === 0 && shouldForceExternalToolCall({
                             choice: externalToolChoice,
                             registry: externalToolRegistry,
                             lastUserMsg,
@@ -1601,6 +1608,12 @@ export function createApp(config) {
                         }
                         const { validCalls: validatedStreamedToolCalls } = finalizeValidatedToolCalls(parsedToolCalls, externalToolRegistry);
                         const finalStreamedToolCalls = validatedStreamedToolCalls;
+                        if (hasExternalToolResults && deferredTextChunks.length > 0) {
+                            for (const chunk of deferredTextChunks) {
+                                res.write(chunk);
+                            }
+                            deferredTextChunks.length = 0;
+                        }
                         logDebug("Stream finish", { finalToolCalls: finalStreamedToolCalls.length, streamedToolCalls: streamedToolCalls.length, deferredChunks: deferredTextChunks.length, streamedContent: streamedContent.length });
                         if (finalStreamedToolCalls.length === 0 && deferredTextChunks.length > 0) {
                             deferredTextChunks.forEach((serializedChunk) => res.write(serializedChunk));
@@ -1663,7 +1676,7 @@ export function createApp(config) {
                                 }
                             });
                         }
-                        let parsedToolCalls = externalToolRegistry.length > 0
+                        let parsedToolCalls = externalToolRegistry.length > 0 && !hasExternalToolResults
                             ? parseExternalToolCallsFromText(externalToolRegistry, reasoning, content)
                             : [];
                         if (parsedToolCalls.length === 0 && shouldForceExternalToolCall({
@@ -2241,9 +2254,11 @@ export function createApp(config) {
                     if (!delta) return;
                     if (isReasoning) rawReasoning += delta;
                     else rawContent += delta;
-                    const parsedDeltaToolCalls = isReasoning
-                        ? parseReasoningToolCalls(delta)
-                        : parseContentToolCalls(delta);
+                    const parsedDeltaToolCalls = hasExternalToolResults
+                        ? []
+                        : (isReasoning
+                            ? parseReasoningToolCalls(delta)
+                            : parseContentToolCalls(delta));
                     if (parsedDeltaToolCalls.length > 0) {
                         const { validCalls: allowedDeltaToolCalls } = finalizeValidatedToolCalls(parsedDeltaToolCalls, externalToolRegistry);
                         allowedDeltaToolCalls.forEach((toolCall) => emitResponsesFunctionCall(toolCall));
