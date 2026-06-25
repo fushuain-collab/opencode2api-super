@@ -1509,6 +1509,7 @@ export function createApp(config) {
                             logDebug('Stream error:', e.message);
                         }
 
+                        const shouldSuppressReasoning = finalStreamedToolCalls.length > 0;
                         if (collected && collected.__error) {
                             logDebug('SSE collect error, falling back to polling', {
                                 sessionId,
@@ -1518,7 +1519,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (reasoning) sendDelta(reasoning, true);
+                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
                                 if (content) sendDelta(content, false);
                             }
                         } else if (collected && collected.noData) {
@@ -1527,7 +1528,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (reasoning) sendDelta(reasoning, true);
+                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
                                 if (content) sendDelta(content, false);
                             }
                         } else if (collected && collected.idleTimeout) {
@@ -1536,9 +1537,9 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                const remainingReasoning = reasoning && reasoning.startsWith(rawStreamedReasoning)
+                                const remainingReasoning = !shouldSuppressReasoning && reasoning && reasoning.startsWith(rawStreamedReasoning)
                                     ? reasoning.slice(rawStreamedReasoning.length)
-                                    : reasoning;
+                                    : (!shouldSuppressReasoning ? reasoning : '');
                                 const remainingContent = content && content.startsWith(rawStreamedContent)
                                     ? content.slice(rawStreamedContent.length)
                                     : content;
@@ -1548,7 +1549,7 @@ export function createApp(config) {
                         }
 
                         if (collected && !streamedContent && !streamedReasoning && (collected.reasoning || collected.content)) {
-                            if (collected.reasoning) sendDelta(collected.reasoning, true);
+                            if (!shouldSuppressReasoning && collected.reasoning) sendDelta(collected.reasoning, true);
                             if (collected.content) sendDelta(collected.content, false);
                         }
 
@@ -1558,7 +1559,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (reasoning) sendDelta(reasoning, true);
+                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
                                 if (content) sendDelta(content, false);
                             }
                         }
@@ -1693,9 +1694,7 @@ export function createApp(config) {
                             }
                             : {
                                 role: 'assistant',
-                                content: safeReasoning
-                                    ? `<think>\n${safeReasoning}\n</think>\n\n${safeContent}`
-                                    : safeContent
+                                content: safeContent
                             };
 
                         res.json({
