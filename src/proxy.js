@@ -1509,7 +1509,7 @@ export function createApp(config) {
                             logDebug('Stream error:', e.message);
                         }
 
-                        const shouldSuppressReasoning = finalStreamedToolCalls.length > 0;
+                        let pendingFallbackReasoning = '';
                         if (collected && collected.__error) {
                             logDebug('SSE collect error, falling back to polling', {
                                 sessionId,
@@ -1519,7 +1519,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
+                                pendingFallbackReasoning = reasoning || '';
                                 if (content) sendDelta(content, false);
                             }
                         } else if (collected && collected.noData) {
@@ -1528,7 +1528,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
+                                pendingFallbackReasoning = reasoning || '';
                                 if (content) sendDelta(content, false);
                             }
                         } else if (collected && collected.idleTimeout) {
@@ -1537,19 +1537,19 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                const remainingReasoning = !shouldSuppressReasoning && reasoning && reasoning.startsWith(rawStreamedReasoning)
+                                const remainingReasoning = reasoning && reasoning.startsWith(rawStreamedReasoning)
                                     ? reasoning.slice(rawStreamedReasoning.length)
-                                    : (!shouldSuppressReasoning ? reasoning : '');
+                                    : (reasoning || '');
+                                pendingFallbackReasoning = remainingReasoning;
                                 const remainingContent = content && content.startsWith(rawStreamedContent)
                                     ? content.slice(rawStreamedContent.length)
                                     : content;
-                                if (remainingReasoning) sendDelta(remainingReasoning, true);
                                 if (remainingContent) sendDelta(remainingContent, false);
                             }
                         }
 
                         if (collected && !streamedContent && !streamedReasoning && (collected.reasoning || collected.content)) {
-                            if (!shouldSuppressReasoning && collected.reasoning) sendDelta(collected.reasoning, true);
+                            pendingFallbackReasoning = pendingFallbackReasoning || collected.reasoning || '';
                             if (collected.content) sendDelta(collected.content, false);
                         }
 
@@ -1559,7 +1559,7 @@ export function createApp(config) {
                             if (error && !content && !reasoning) {
                                 sendDelta(`[Proxy Error] ${error.name || 'OpenCodeError'}: ${error.data?.message || error.message || 'Unknown error'}`);
                             } else {
-                                if (!shouldSuppressReasoning && reasoning) sendDelta(reasoning, true);
+                                pendingFallbackReasoning = pendingFallbackReasoning || reasoning || '';
                                 if (content) sendDelta(content, false);
                             }
                         }
@@ -1603,6 +1603,9 @@ export function createApp(config) {
                         const finalStreamedToolCalls = validatedStreamedToolCalls;
                         if (finalStreamedToolCalls.length === 0 && deferredTextChunks.length > 0) {
                             deferredTextChunks.forEach((serializedChunk) => res.write(serializedChunk));
+                        }
+                        if (finalStreamedToolCalls.length === 0 && pendingFallbackReasoning) {
+                            sendDelta(pendingFallbackReasoning, true);
                         }
                         if (finalStreamedToolCalls.length > 0 && streamedToolCalls.length === 0) {
                             const toolCallDeltas = finalStreamedToolCalls.map((toolCall, index) => ({
