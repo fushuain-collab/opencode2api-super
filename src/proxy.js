@@ -693,6 +693,22 @@ export function createApp(config) {
             }
         }));
     };
+    const shouldForceExternalToolCall = ({ choice, registry, lastUserMsg = '', content = '', reasoning = '' }) => {
+        if (!Array.isArray(registry) || registry.length === 0) return false;
+        if (choice?.mode === 'none') return false;
+        if (choice?.mode === 'required') return true;
+
+        const userText = String(lastUserMsg || '').toLowerCase();
+        const assistantText = `${content || ''}\n${reasoning || ''}`.toLowerCase();
+        const toolNames = registry.flatMap((tool) => [tool.originalName, tool.namespacedName])
+            .filter(Boolean)
+            .map((name) => String(name).toLowerCase());
+        const userMentionsTool = toolNames.some((name) => userText.includes(name));
+        const userRequestsTool = /\b(call|invoke|use|run|execute|tool|function|search|fetch|lookup|weather)\b|调用|工具|函数|查询|搜索|检索|天气|查一下|搜一下/.test(userText);
+        const assistantAvoidedTool = /cannot\s+(call|use|access)|can't\s+(call|use|access)|unable\s+to\s+(call|use|access)|没有办法调用|无法调用|不能调用|工具不可用|tool\s+unavailable/.test(assistantText);
+
+        return userMentionsTool || (registry.length === 1 && userRequestsTool) || assistantAvoidedTool;
+    };
 
     const createForcedToolCallRequester = ({
         mode,
@@ -1346,7 +1362,7 @@ export function createApp(config) {
                     }
 
                     const requestForcedChatToolCall = createForcedToolCallRequester({
-                        mode: externalToolChoice.mode,
+                        mode: 'required',
                         sessionId,
                         systemWithGuard,
                         requiredTool: externalToolChoice.requiredTool || externalToolRegistry[0]?.namespacedName,
@@ -1372,6 +1388,17 @@ export function createApp(config) {
                         let rawStreamedContent = '';
                         let rawStreamedReasoning = '';
                         const streamedToolCalls = [];
+                        const deferStreamingTextForToolDecision = shouldForceExternalToolCall({
+                            choice: externalToolChoice,
+                            registry: externalToolRegistry,
+                            lastUserMsg
+                        });
+                        const deferredTextChunks = [];
+                        const writeTextChunk = (chunk) => {
+                            const serialized = `data: ${JSON.stringify(chunk)}\n\n`;
+                            if (deferStreamingTextForToolDecision) deferredTextChunks.push(serialized);
+                            else res.write(serialized);
+                        };
                         insideReasoning = false;
                         keepaliveInterval = null;
                         completionTokens = 0;
@@ -1423,7 +1450,7 @@ export function createApp(config) {
                             if (!filtered) return;
                             if (isReasoning) {
                                 if (!insideReasoning) {
-                                    res.write(`data: ${JSON.stringify({
+                                    writeTextChunk({
                                         id,
                                         object: 'chat.completion.chunk',
                                         created: Math.floor(Date.now() / 1000),
@@ -1433,7 +1460,7 @@ export function createApp(config) {
                                             delta: { content: '<think>\n' },
                                             finish_reason: null
                                         }]
-                                    })}\n\n`);
+                                    });
                                     insideReasoning = true;
                                 }
                                 streamedReasoning += filtered;
@@ -1555,7 +1582,13 @@ export function createApp(config) {
                             : (externalToolRegistry.length > 0
                                 ? parseExternalToolCallsFromText(externalToolRegistry, rawStreamedReasoning, rawStreamedContent)
                                 : []);
-                        if (parsedToolCalls.length === 0 && externalToolChoice.mode === 'required') {
+                        if (parsedToolCalls.length === 0 && shouldForceExternalToolCall({
+                            choice: externalToolChoice,
+                            registry: externalToolRegistry,
+                            lastUserMsg,
+                            content: rawStreamedContent,
+                            reasoning: rawStreamedReasoning
+                        })) {
                             const forcedResponse = await requestForcedChatToolCall();
                             if (forcedResponse) {
                                 parsedToolCalls = parseExternalToolCallsFromText(
@@ -1625,7 +1658,13 @@ export function createApp(config) {
                         let parsedToolCalls = externalToolRegistry.length > 0
                             ? parseExternalToolCallsFromText(externalToolRegistry, reasoning, content)
                             : [];
-                        if (parsedToolCalls.length === 0 && externalToolChoice.mode === 'required') {
+                        if (parsedToolCalls.length === 0 && shouldForceExternalToolCall({
+                            choice: externalToolChoice,
+                            registry: externalToolRegistry,
+                            lastUserMsg,
+                            content,
+                            reasoning
+                        })) {
                             const forcedResponse = await requestForcedChatToolCall();
                             if (forcedResponse) {
                                 content = forcedResponse.content || content;
