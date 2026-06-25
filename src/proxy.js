@@ -1467,7 +1467,7 @@ export function createApp(config) {
                                 reasoningTokens += Math.ceil(filtered.length / 4);
                             } else {
                                 if (insideReasoning) {
-                                    res.write(`data: ${JSON.stringify({
+                                    writeTextChunk({
                                         id,
                                         object: 'chat.completion.chunk',
                                         created: Math.floor(Date.now() / 1000),
@@ -1477,20 +1477,19 @@ export function createApp(config) {
                                             delta: { content: '\n</think>\n\n' },
                                             finish_reason: null
                                         }]
-                                    })}\n\n`);
+                                    });
                                     insideReasoning = false;
                                 }
                                 streamedContent += filtered;
                                 completionTokens += Math.ceil(filtered.length / 4);
                             }
-                            const chunk = {
+                            writeTextChunk({
                                 id,
                                 object: 'chat.completion.chunk',
                                 created: Math.floor(Date.now() / 1000),
                                 model: `${pID}/${mID}`,
                                 choices: [{ index: 0, delta: { content: filtered }, finish_reason: null }]
-                            };
-                            res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                            });
                         };
 
                         let collected = null;
@@ -1564,7 +1563,7 @@ export function createApp(config) {
                         }
 
                         if (insideReasoning) {
-                            res.write(`data: ${JSON.stringify({
+                            writeTextChunk({
                                 id,
                                 object: 'chat.completion.chunk',
                                 created: Math.floor(Date.now() / 1000),
@@ -1574,7 +1573,7 @@ export function createApp(config) {
                                     delta: { content: '\n</think>\n\n' },
                                     finish_reason: null
                                 }]
-                            })}\n\n`);
+                            });
                         }
 
                         let parsedToolCalls = streamedToolCalls.length > 0
@@ -1600,6 +1599,9 @@ export function createApp(config) {
                         }
                         const { validCalls: validatedStreamedToolCalls } = finalizeValidatedToolCalls(parsedToolCalls, externalToolRegistry);
                         const finalStreamedToolCalls = validatedStreamedToolCalls;
+                        if (finalStreamedToolCalls.length === 0 && deferredTextChunks.length > 0) {
+                            deferredTextChunks.forEach((serializedChunk) => res.write(serializedChunk));
+                        }
                         if (finalStreamedToolCalls.length > 0 && streamedToolCalls.length === 0) {
                             const toolCallDeltas = finalStreamedToolCalls.map((toolCall, index) => ({
                                 index,
