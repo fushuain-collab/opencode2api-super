@@ -1473,6 +1473,15 @@ export function createApp(config) {
                                 }
                                 streamedReasoning += filtered;
                                 reasoningTokens += Math.ceil(filtered.length / 4);
+                                // Also track in rawStreamedContent so stream-end fallback doesn't re-emit
+                                rawStreamedContent = (rawStreamedContent || '') + filtered;
+                                writeTextChunk({
+                                    id,
+                                    object: 'chat.completion.chunk',
+                                    created: Math.floor(Date.now() / 1000),
+                                    model: `${pID}/${mID}`,
+                                    choices: [{ index: 0, delta: { content: filtered }, finish_reason: null }]
+                                });
                             } else {
                                 if (insideReasoning) {
                                     writeTextChunk({
@@ -1490,15 +1499,15 @@ export function createApp(config) {
                                 }
                                 streamedContent += filtered;
                                 completionTokens += Math.ceil(filtered.length / 4);
+                                rawStreamedContent = (rawStreamedContent || '') + filtered;
+                                writeTextChunk({
+                                    id,
+                                    object: 'chat.completion.chunk',
+                                    created: Math.floor(Date.now() / 1000),
+                                    model: `${pID}/${mID}`,
+                                    choices: [{ index: 0, delta: { content: filtered }, finish_reason: null }]
+                                });
                             }
-
-                            writeTextChunk({
-                                id,
-                                object: 'chat.completion.chunk',
-                                created: Math.floor(Date.now() / 1000),
-                                model: `${pID}/${mID}`,
-                                choices: [{ index: 0, delta: { content: filtered }, finish_reason: null }]
-                            });
                         };
 
                         let collected = null;
