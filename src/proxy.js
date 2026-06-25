@@ -1684,19 +1684,19 @@ export function createApp(config) {
                         const reasoningTokensCalc = Math.ceil((reasoning || '').length / 4);
                         const totalTokens = promptTokens + completionTokensCalc + reasoningTokensCalc;
 
-                        let finalContent = safeContent;
-                        if (safeReasoning) {
-                            finalContent = `<think>\n${safeReasoning}\n</think>\n\n${safeContent}`;
-                        }
-
                         const publicValidatedToolCalls = toPublicToolCalls(validatedToolCalls);
                         const assistantMessage = publicValidatedToolCalls.length > 0
                             ? {
                                 role: 'assistant',
-                                content: finalContent || null,
+                                content: null,
                                 tool_calls: publicValidatedToolCalls
                             }
-                            : { role: 'assistant', content: finalContent };
+                            : {
+                                role: 'assistant',
+                                content: safeReasoning
+                                    ? `<think>\n${safeReasoning}\n</think>\n\n${safeContent}`
+                                    : safeContent
+                            };
 
                         res.json({
                             id: `chatcmpl-${Date.now()}`,
