@@ -1601,6 +1601,7 @@ export function createApp(config) {
                         }
                         const { validCalls: validatedStreamedToolCalls } = finalizeValidatedToolCalls(parsedToolCalls, externalToolRegistry);
                         const finalStreamedToolCalls = validatedStreamedToolCalls;
+                        logDebug("Stream finish", { finalToolCalls: finalStreamedToolCalls.length, streamedToolCalls: streamedToolCalls.length, deferredChunks: deferredTextChunks.length, streamedContent: streamedContent.length });
                         if (finalStreamedToolCalls.length === 0 && deferredTextChunks.length > 0) {
                             deferredTextChunks.forEach((serializedChunk) => res.write(serializedChunk));
                         }
